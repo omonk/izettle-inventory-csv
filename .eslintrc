@@ -1,5 +1,6 @@
 {
-  "extends": "standard",
+  "parser": "babel-eslint",
+  "extends": ["eslint:recommended", "xo-space/esnext", "prettier"],
   "rules": {
     "semi": 0
   },

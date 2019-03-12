@@ -8,6 +8,7 @@ module.exports = {
     runtime: 'nodejs8.10',
     stage: 'prod',
     region: 'eu-west-1',
+    profile: 'monk',
   },
   functions: {
     ExtractAndUpload: {
