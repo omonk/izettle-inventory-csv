@@ -2,7 +2,9 @@ const Main = require('apr-main');
 const Got = require('got');
 const { format, subDays } = require('date-fns');
 const Json2csvParser = require('json2csv').Parser;
+const AWS = require('aws-sdk');
 
+console.log(process.env);
 const {
   IZETTLE_CLIENT_ID,
   IZETTLE_CLIENT_SECRET,
@@ -21,7 +23,6 @@ const Auth = async () => {
     },
     form: true,
     json: true,
-    throwHttpErrors: false,
   });
 
   return body;
@@ -31,7 +32,7 @@ const GetLatestTransactions = async token => {
   const { body } = await Got('https://purchase.izettle.com/purchases/v2', {
     json: true,
     query: {
-      startDate: format(subDays(new Date(), 4), 'YYYY-MM-DD'),
+      startDate: format(subDays(new Date(), 1), 'YYYY-MM-DD'),
     },
     headers: {
       Authorization: `Bearer ${token}`,
@@ -82,9 +83,20 @@ const GetOrganisationMeta = async token => {
   return body;
 };
 
+const UploadToS3 = async csv => {
+  const S3 = new AWS.S3();
+
+  await S3.upload({
+    Bucket: 'lftransactions',
+    Key: `transctions_${format(new Date(), 'YYYY-MM-DD')}`,
+    Body: csv,
+  }).promise();
+};
+
 module.exports.handle = async ev => {
   const { access_token: token } = await Auth();
   const { organizationUuid } = await GetOrganisationMeta(token);
+
   const products = await GetAllProducts(token, organizationUuid);
   const transactions = await GetLatestTransactions(token);
 
@@ -105,6 +117,7 @@ module.exports.handle = async ev => {
   });
 
   const csv = parser.parse(data);
+  await UploadToS3(csv);
 
   return csv;
 };
