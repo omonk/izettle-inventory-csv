@@ -1,73 +1,56 @@
 const Main = require('apr-main');
 const Got = require('got');
-const { format } = require('date-fns');
+const { format, subDays } = require('date-fns');
 const Json2csvParser = require('json2csv').Parser;
 
-const arr = {
-  purchases: [
-    {
-      products: [
-        {
-          quantity: 2,
-          variantName: 'Jose Antonio Casals Catalá',
-          variantUuid: '980160d3-cafe-4e03-b428-753d6c59d09f',
-          unitName: 'g',
-        },
-        {
-          quantity: 2,
-          variantName: 'Alba Rosa Nogueira Miguel',
-          variantUuid: 'd6a46f66-2da4-4d70-bed6-937ad506ad98',
-        },
-        {
-          quantity: 2,
-          variantName: 'Liane Köster',
-          variantUuid: 13,
-        },
-        {
-          quantity: 2,
-          variantName: 'Dr. Evangelia Bolander B.Sc.',
-          variantUuid: 4912,
-          unitName: 'g',
-        },
-      ],
+const {
+  IZETTLE_CLIENT_ID,
+  IZETTLE_CLIENT_SECRET,
+  IZETTLE_EMAIL,
+  IZETTLE_PASSWORD,
+} = process.env;
+
+const Auth = async () => {
+  const { body } = await Got('https://oauth.izettle.net/token', {
+    body: {
+      grant_type: 'password',
+      client_id: IZETTLE_CLIENT_ID,
+      client_secret: IZETTLE_CLIENT_SECRET,
+      username: IZETTLE_EMAIL,
+      password: IZETTLE_PASSWORD,
     },
-    {
-      products: [
-        {
-          quantity: 2,
-          variantName: 'Jose Antonio Casals Catalá',
-          variantUuid: '980160d3-cafe-4e03-b428-753d6c59d09f',
-          unitName: 'g',
-        },
-        {
-          quantity: 2,
-          variantName: 'Alba Rosa Nogueira Miguel',
-          variantUuid: 'd6a46f66-2da4-4d70-bed6-937ad506ad98',
-          unitName: 'g',
-        },
-      ],
-    },
-  ],
+    form: true,
+    json: true,
+    throwHttpErrors: false,
+  });
+
+  return body;
 };
 
-const GetLatestTransactions = async () => {
-  // const { body } = await Got('https://api.izettle.com/purchases', {
-  //   json: true,
-  //   query: {
-  //     startDate: format(new Date(), 'YYYY-MM-DD'),
-  //   },
-  // });
+const GetLatestTransactions = async token => {
+  const { body } = await Got('https://purchase.izettle.com/purchases/v2', {
+    json: true,
+    query: {
+      startDate: format(subDays(new Date(), 4), 'YYYY-MM-DD'),
+    },
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
 
-  return arr.purchases
+  const { purchases } = body;
+
+  return purchases
     .reduce((acc, { products }) => acc.concat(products), [])
     .reduce(
-      (acc, { variantUuid, quantity, variantName, unitName }) => ({
+      (acc, { variantUuid, quantity, variantName, unitName, productUuid }) => ({
         ...acc,
         [variantUuid]: {
           quantity: acc[variantUuid]
-            ? acc[variantUuid].quantity + quantity
-            : quantity,
-          variantName,
+            ? acc[variantUuid].quantity + Number(quantity)
+            : Number(quantity),
+          variant: variantName || '',
+          productUuid,
           unitName: unitName || '',
         },
       }),
@@ -75,20 +58,53 @@ const GetLatestTransactions = async () => {
     );
 };
 
+const GetAllProducts = async (token, organizationUuid) => {
+  const { body } = await Got(
+    `https://products.izettle.com/organizations/${organizationUuid}/products`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      json: true,
+    },
+  );
+  return body;
+};
+
+const GetOrganisationMeta = async token => {
+  const { body } = await Got('https://oauth.izettle.net/users/me', {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    json: true,
+  });
+
+  return body;
+};
+
 module.exports.handle = async ev => {
-  const products = await GetLatestTransactions();
+  const { access_token: token } = await Auth();
+  const { organizationUuid } = await GetOrganisationMeta(token);
+  const products = await GetAllProducts(token, organizationUuid);
+  const transactions = await GetLatestTransactions(token);
+
+  const data = Object.keys(transactions).map(uuid => {
+    const matchingProduct = products.find(product => {
+      return product.uuid === transactions[uuid].productUuid;
+    });
+
+    return {
+      brand: matchingProduct ? matchingProduct.name : undefined,
+      ...transactions[uuid],
+    };
+  });
 
   const parser = new Json2csvParser({
     header: false,
-    fields: ['uuid', 'quantity', 'variantName', 'unitName'],
+    fields: ['brand', 'variantName', 'quantity', 'unitName'],
   });
 
-  const csv = parser.parse(
-    Object.keys(products).map(uuid => ({
-      uuid,
-      ...products[uuid],
-    })),
-  );
+  const csv = parser.parse(data);
 
   return csv;
 };

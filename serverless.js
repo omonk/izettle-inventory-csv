@@ -9,6 +9,12 @@ module.exports = {
     stage: 'prod',
     region: 'eu-west-1',
     profile: 'monk',
+    environment: {
+      IZETTLE_CLIENT_ID: '${env:IZETTLE_CLIENT_ID}',
+      IZETTLE_CLIENT_SECRET: '${env:IZETTLE_CLIENT_SECRET}',
+      IZETTLE_EMAIL: '${env:IZETTLE_EMAIL}',
+      IZETTLE_PASSWORD: '${env:IZETTLE_PASSWORD}',
+    },
   },
   functions: {
     ExtractAndUpload: {
