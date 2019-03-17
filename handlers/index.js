@@ -1,15 +1,16 @@
 const Main = require('apr-main');
 const Got = require('got');
-const { format, subDays } = require('date-fns');
+const Flatten = require('lodash.flatten');
+const { format, subDays, startOfToday, isSameDay } = require('date-fns');
 const Json2csvParser = require('json2csv').Parser;
 const AWS = require('aws-sdk');
 
-console.log(process.env);
 const {
   IZETTLE_CLIENT_ID,
   IZETTLE_CLIENT_SECRET,
   IZETTLE_EMAIL,
   IZETTLE_PASSWORD,
+  TRANSACTIONS_BUCKET,
 } = process.env;
 
 const Auth = async () => {
@@ -32,7 +33,8 @@ const GetLatestTransactions = async token => {
   const { body } = await Got('https://purchase.izettle.com/purchases/v2', {
     json: true,
     query: {
-      startDate: format(subDays(new Date(), 1), 'YYYY-MM-DD'),
+      startDate: format(subDays(new Date(), 7), 'YYYY-MM-DD'),
+      endDate: format(startOfToday(), 'YYYY-MM-DD'),
     },
     headers: {
       Authorization: `Bearer ${token}`,
@@ -41,22 +43,51 @@ const GetLatestTransactions = async token => {
 
   const { purchases } = body;
 
-  return purchases
-    .reduce((acc, { products }) => acc.concat(products), [])
-    .reduce(
-      (acc, { variantUuid, quantity, variantName, unitName, productUuid }) => ({
-        ...acc,
-        [variantUuid]: {
-          quantity: acc[variantUuid]
-            ? acc[variantUuid].quantity + Number(quantity)
-            : Number(quantity),
-          variant: variantName || '',
-          productUuid,
-          unitName: unitName || '',
-        },
-      }),
-      {},
-    );
+  const purchasesGroupedByDay = purchases.reduce((acc, curr) => {
+    const { timestamp } = curr;
+    const date = format(timestamp, 'DD-MM-YYYY');
+
+    return {
+      ...acc,
+      [date]: acc[date] ? acc[date].concat(curr) : [curr],
+    };
+  }, {});
+
+  return Object.keys(purchasesGroupedByDay).map((key, _, arr) => {
+    return {
+      timestamp: key,
+      products: purchasesGroupedByDay[key]
+        .reduce((acc, { products }) => acc.concat(products), [])
+        .reduce(
+          (
+            acc,
+            {
+              variantUuid,
+              quantity,
+              variantName,
+              unitName,
+              productUuid,
+              unitPrice,
+            },
+          ) => ({
+            ...acc,
+            [variantUuid]: {
+              quantity: acc[variantUuid]
+                ? acc[variantUuid].quantity + Number(quantity)
+                : Number(quantity),
+              variant: variantName || '',
+              productUuid,
+              unitName: unitName || '',
+              unitPrice: acc[variantUuid]
+                ? acc[variantUuid].unitPrice +
+                  Number(unitPrice / 100) * Number(quantity)
+                : Number(unitPrice / 100) * Number(quantity),
+            },
+          }),
+          {},
+        ),
+    };
+  });
 };
 
 const GetAllProducts = async (token, organizationUuid) => {
@@ -86,8 +117,8 @@ const GetOrganisationMeta = async token => {
 const UploadToS3 = async csv => {
   const S3 = new AWS.S3();
 
-  await S3.upload({
-    Bucket: 'lftransactions',
+  await S3.putObject({
+    Bucket: TRANSACTIONS_BUCKET,
     Key: `transctions_${format(new Date(), 'YYYY-MM-DD')}`,
     Body: csv,
   }).promise();
@@ -100,23 +131,34 @@ module.exports.handle = async ev => {
   const products = await GetAllProducts(token, organizationUuid);
   const transactions = await GetLatestTransactions(token);
 
-  const data = Object.keys(transactions).map(uuid => {
-    const matchingProduct = products.find(product => {
-      return product.uuid === transactions[uuid].productUuid;
-    });
+  const data = transactions.map(
+    ({ products: transactionProducts, timestamp }) => {
+      return Object.keys(transactionProducts).map(key => {
+        const matchingProduct = products.find(product => {
+          return product.uuid === transactionProducts[key].productUuid;
+        });
 
-    return {
-      brand: matchingProduct ? matchingProduct.name : undefined,
-      ...transactions[uuid],
-    };
-  });
+        return {
+          brand: matchingProduct ? matchingProduct.name : undefined,
+          timestamp,
+          ...transactionProducts[key],
+        };
+      });
+    },
+  );
 
   const parser = new Json2csvParser({
-    header: false,
-    fields: ['brand', 'variantName', 'quantity', 'unitName'],
+    fields: [
+      'brand',
+      'timestamp',
+      'quantity',
+      'variant',
+      'unitName',
+      'unitPrice',
+    ],
   });
 
-  const csv = parser.parse(data);
+  const csv = parser.parse(Flatten(data));
   await UploadToS3(csv);
 
   return csv;

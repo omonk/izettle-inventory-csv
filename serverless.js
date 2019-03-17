@@ -15,6 +15,13 @@ module.exports = {
       IZETTLE_EMAIL: '${env:IZETTLE_EMAIL}',
       IZETTLE_PASSWORD: '${env:IZETTLE_PASSWORD}',
     },
+    iamRoleStatements: [
+      {
+        Effect: 'Allow',
+        Action: ['s3:*Object'],
+        Resource: ['arn:aws:s3:::lafauxmagerietransactions/*'],
+      },
+    ],
   },
   functions: {
     ExtractAndUpload: {
@@ -27,6 +34,11 @@ module.exports = {
           },
         },
       ],
+      environment: {
+        TRANSACTIONS_BUCKET: {
+          Ref: 'LaFauxmagerieSalesBucket',
+        },
+      },
     },
   },
   resources: {
@@ -34,10 +46,11 @@ module.exports = {
       LaFauxmagerieSalesBucket: {
         Type: 'AWS::S3::Bucket',
         Properties: {
-          BucketName: 'LaFauxmagerieSales',
+          BucketName: 'lafauxmagerietransactions',
+          AccessControl: 'AuthenticatedRead',
         },
       },
-      LaFauxmagerieSalesBucket: {
+      LaFauxmagerieSalesBucketPolicy: {
         Type: 'AWS::S3::BucketPolicy',
         Properties: {
           Bucket: {
@@ -66,10 +79,4 @@ module.exports = {
       },
     },
   },
-  //   Outputs: {
-  //     WildRydesBucketURL: {
-  //       Description: 'ExtractAndUpload Lambda url',
-  //       Value: { 'Fn::GetAtt': [WildRydesBucket, WebsiteURL] },
-  //     },
-  //   },
 };
