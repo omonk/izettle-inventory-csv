@@ -1,7 +1,7 @@
 const Main = require('apr-main');
 const Got = require('got');
 const Flatten = require('lodash.flatten');
-const { format, subDays, startOfToday, isSameDay } = require('date-fns');
+const { format, subDays, startOfWeek } = require('date-fns');
 const Json2csvParser = require('json2csv').Parser;
 const AWS = require('aws-sdk');
 
@@ -33,7 +33,7 @@ const GetLatestTransactions = async token => {
   const { body } = await Got('https://purchase.izettle.com/purchases/v2', {
     json: true,
     query: {
-      startDate: format(subDays(new Date(), 7), 'YYYY-MM-DD'),
+      startDate: format(startOfWeek(new Date()), 'YYYY-MM-DD'),
       endDate: format(new Date(), 'YYYY-MM-DD'),
     },
     headers: {

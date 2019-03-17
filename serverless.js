@@ -34,7 +34,7 @@ module.exports = {
           },
         },
         {
-          schedule: 'cron(0 1 * * MON)',
+          schedule: 'cron(0 23 ? * SUN *)',
         },
       ],
       environment: {
