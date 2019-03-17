@@ -173,7 +173,7 @@ module.exports.handle = async ev => {
   const csv = parser.parse(Flatten(data));
 
   if (STAGE === 'prod') {
-    await UploadToS3(csv);
+    await UploadToS3(csv, type);
   }
 
   return csv;
