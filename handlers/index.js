@@ -1,7 +1,7 @@
 const Main = require('apr-main');
 const Got = require('got');
 const Flatten = require('lodash.flatten');
-const { format, subDays, startOfWeek } = require('date-fns');
+const { format, startOfWeek } = require('date-fns');
 const Json2csvParser = require('json2csv').Parser;
 const AWS = require('aws-sdk');
 
@@ -11,7 +11,10 @@ const {
   IZETTLE_EMAIL,
   IZETTLE_PASSWORD,
   TRANSACTIONS_BUCKET,
+  STAGE = 'development',
 } = process.env;
+
+const dateFormat = 'YYYY-MM-DD';
 
 const Auth = async () => {
   const { body } = await Got('https://oauth.izettle.net/token', {
@@ -29,12 +32,20 @@ const Auth = async () => {
   return body;
 };
 
-const GetLatestTransactions = async token => {
+const generateRange = type => {
+  const date = new Date();
+  const start = type === 'weekly' ? startOfWeek(date) : endOfYesterday(date);
+
+  return {
+    startDate: format(start, dateFormat),
+  };
+};
+
+const GetLatestTransactions = async (token, type) => {
   const { body } = await Got('https://purchase.izettle.com/purchases/v2', {
     json: true,
     query: {
-      startDate: format(startOfWeek(new Date()), 'YYYY-MM-DD'),
-      endDate: format(new Date(), 'YYYY-MM-DD'),
+      ...generateRange(type),
     },
     headers: {
       Authorization: `Bearer ${token}`,
@@ -45,7 +56,7 @@ const GetLatestTransactions = async token => {
 
   const purchasesGroupedByDay = purchases.reduce((acc, curr) => {
     const { timestamp } = curr;
-    const date = format(timestamp, 'DD-MM-YYYY');
+    const date = format(timestamp, dateFormat);
 
     return {
       ...acc,
@@ -114,22 +125,24 @@ const GetOrganisationMeta = async token => {
   return body;
 };
 
-const UploadToS3 = async csv => {
+const UploadToS3 = async (csv, type) => {
   const S3 = new AWS.S3();
 
   await S3.putObject({
     Bucket: TRANSACTIONS_BUCKET,
-    Key: `transctions_${format(new Date(), 'YYYY-MM-DD')}`,
+    Key: `transctions_${type}_${format(new Date(), dateFormat)}`,
     Body: csv,
   }).promise();
 };
 
 module.exports.handle = async ev => {
+  const { type = 'daily' } = ev;
+
   const { access_token: token } = await Auth();
   const { organizationUuid } = await GetOrganisationMeta(token);
 
   const products = await GetAllProducts(token, organizationUuid);
-  const transactions = await GetLatestTransactions(token);
+  const transactions = await GetLatestTransactions(token, type);
 
   const data = transactions.map(
     ({ products: transactionProducts, timestamp }) => {
@@ -159,7 +172,8 @@ module.exports.handle = async ev => {
   });
 
   const csv = parser.parse(Flatten(data));
-  await UploadToS3(csv);
+
+  STAGE === 'prod' && (await UploadToS3(csv));
 
   return csv;
 };

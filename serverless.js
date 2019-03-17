@@ -2,11 +2,14 @@ const { name: service } = require('./package.json');
 
 module.exports = {
   service,
-  plugins: ['serverless-offline'],
+  plugins: ['serverless-offline', 'serverless-offline-scheduler'],
+  custom: {
+    stage: '${opt:stage, "development"}',
+  },
   provider: {
     name: 'aws',
     runtime: 'nodejs8.10',
-    stage: 'prod',
+    stage: '${self:custom.stage}',
     region: 'eu-west-1',
     profile: 'monk',
     environment: {
@@ -14,6 +17,7 @@ module.exports = {
       IZETTLE_CLIENT_SECRET: '${env:IZETTLE_CLIENT_SECRET}',
       IZETTLE_EMAIL: '${env:IZETTLE_EMAIL}',
       IZETTLE_PASSWORD: '${env:IZETTLE_PASSWORD}',
+      STAGE: '${self:custom.stage}',
     },
     iamRoleStatements: [
       {
@@ -34,7 +38,20 @@ module.exports = {
           },
         },
         {
-          schedule: 'cron(0 23 ? * SUN *)',
+          schedule: {
+            rate: 'cron(0 23 ? * SUN *)',
+            input: {
+              type: 'weekly',
+            },
+          },
+        },
+        {
+          schedule: {
+            rate: 'cron(0 23 ? * WED,THURS,FRI,SAT,SUN *)',
+            input: {
+              type: 'daily',
+            },
+          },
         },
       ],
       environment: {
