@@ -1,3 +1,4 @@
+/* eslint-disable no-template-curly-in-string */
 const { name: service } = require('./package.json');
 
 module.exports = {

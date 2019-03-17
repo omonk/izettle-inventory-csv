@@ -6,7 +6,7 @@
   "license": "MIT",
   "scripts": {
     "dev:sls": "sls offline start --port 3001",
-    "deploy": "lint-staged && sls deploy --stage prod"
+    "deploy": "eslint . && sls deploy --stage prod"
   },
   "dependencies": {
     "apr-main": "^4.0.3",
