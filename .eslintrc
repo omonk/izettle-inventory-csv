@@ -2,12 +2,10 @@
   "parser": "babel-eslint",
   "extends": ["eslint:recommended", "xo-space/esnext", "prettier"],
   "rules": {
-    "semi": 0,
-  },
-  "parserOptions": {
-    "ecmaVersion": 2017
-  },
-  "env": {
-    "es6": true
+    "new-cap": 0,
+    "camelcase": 0,
+    "no-template-curly-in-string": 1,
+    "capitalized-comments": 0,
+    "no-console": 1
   }
 }

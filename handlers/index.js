@@ -1,7 +1,6 @@
-const Main = require('apr-main');
 const Got = require('got');
 const Flatten = require('lodash.flatten');
-const { format, startOfWeek } = require('date-fns');
+const { format, startOfWeek, endOfYesterday } = require('date-fns');
 const Json2csvParser = require('json2csv').Parser;
 const AWS = require('aws-sdk');
 
@@ -64,7 +63,7 @@ const GetLatestTransactions = async (token, type) => {
     };
   }, {});
 
-  return Object.keys(purchasesGroupedByDay).map((key, _, arr) => {
+  return Object.keys(purchasesGroupedByDay).map((key, _) => {
     return {
       timestamp: key,
       products: purchasesGroupedByDay[key]
@@ -173,7 +172,9 @@ module.exports.handle = async ev => {
 
   const csv = parser.parse(Flatten(data));
 
-  STAGE === 'prod' && (await UploadToS3(csv));
+  if (STAGE === 'prod') {
+    await UploadToS3(csv);
+  }
 
   return csv;
 };
