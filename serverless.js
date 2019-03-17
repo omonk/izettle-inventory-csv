@@ -33,6 +33,9 @@ module.exports = {
             method: 'get',
           },
         },
+        {
+          schedule: 'cron(0 1 * * MON)',
+        },
       ],
       environment: {
         TRANSACTIONS_BUCKET: {

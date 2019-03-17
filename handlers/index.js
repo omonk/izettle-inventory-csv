@@ -34,7 +34,7 @@ const GetLatestTransactions = async token => {
     json: true,
     query: {
       startDate: format(subDays(new Date(), 7), 'YYYY-MM-DD'),
-      endDate: format(startOfToday(), 'YYYY-MM-DD'),
+      endDate: format(new Date(), 'YYYY-MM-DD'),
     },
     headers: {
       Authorization: `Bearer ${token}`,
