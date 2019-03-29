@@ -81,7 +81,7 @@ module.exports = {
             Statement: [
               {
                 Effect: 'Allow',
-                Action: ['s3:PutObject'],
+                Action: ['s3:getObject', 's3:putObject'],
                 Resource: {
                   'Fn::Join': [
                     '',
@@ -93,6 +93,9 @@ module.exports = {
                   ],
                 },
                 Principal: '*',
+                Condition: {
+                  StringEquals: { 'aws:PrincipalOrgID': ['o-3zlsfb2eon'] },
+                },
               },
             ],
           },
