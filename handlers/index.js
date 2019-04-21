@@ -33,7 +33,10 @@ const Auth = async () => {
 
 const generateRange = type => {
   const date = new Date();
-  const start = type === 'weekly' ? startOfWeek(date) : endOfYesterday(date);
+  const start =
+    type === 'weekly'
+      ? startOfWeek(date, { weekStartsOn: 1 })
+      : endOfYesterday(date);
 
   return {
     startDate: format(start, dateFormat),
@@ -45,6 +48,7 @@ const GetLatestTransactions = async (token, type) => {
     json: true,
     query: {
       ...generateRange(type),
+      limit: 10000,
     },
     headers: {
       Authorization: `Bearer ${token}`,
@@ -52,7 +56,6 @@ const GetLatestTransactions = async (token, type) => {
   });
 
   const { purchases } = body;
-
   const purchasesGroupedByDay = purchases.reduce((acc, curr) => {
     const { timestamp } = curr;
     const date = format(timestamp, dateFormat);

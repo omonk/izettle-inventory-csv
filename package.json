@@ -5,7 +5,7 @@
   "author": "Ollie Monk <ollie@olliemonk.com>",
   "license": "MIT",
   "scripts": {
-    "dev:sls": "sls offline start --port 3001",
+    "dev:sls": "export NODE_ENV='development'; sls offline start --port 3001",
     "deploy": "eslint . && sls deploy --stage prod"
   },
   "dependencies": {
