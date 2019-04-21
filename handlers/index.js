@@ -1,6 +1,6 @@
 const Got = require('got');
 const Flatten = require('lodash.flatten');
-const { format, startOfWeek, endOfYesterday } = require('date-fns');
+const { format, subDays, startOfWeek, startOfDay } = require('date-fns');
 const Json2csvParser = require('json2csv').Parser;
 const AWS = require('aws-sdk');
 
@@ -35,11 +35,12 @@ const generateRange = type => {
   const date = new Date();
   const start =
     type === 'weekly'
-      ? startOfWeek(date, { weekStartsOn: 1 })
-      : endOfYesterday(date);
+      ? startOfWeek(subDays(date, 1), { weekStartsOn: 1 })
+      : startOfDay(date);
 
+  const startDate = format(start, dateFormat);
   return {
-    startDate: format(start, dateFormat),
+    startDate,
   };
 };
 
@@ -56,51 +57,33 @@ const GetLatestTransactions = async (token, type) => {
   });
 
   const { purchases } = body;
-  const purchasesGroupedByDay = purchases.reduce((acc, curr) => {
-    const { timestamp } = curr;
-    const date = format(timestamp, dateFormat);
 
-    return {
+  const allProducts = purchases.reduce((acc, curr) => {
+    const { products = [] } = curr;
+    return acc.concat(products);
+  }, []);
+
+  return allProducts.reduce(
+    (
+      acc,
+      { variantUuid, quantity, variantName, unitName, productUuid, unitPrice },
+    ) => ({
       ...acc,
-      [date]: acc[date] ? acc[date].concat(curr) : [curr],
-    };
-  }, {});
-
-  return Object.keys(purchasesGroupedByDay).map((key, _) => {
-    return {
-      timestamp: key,
-      products: purchasesGroupedByDay[key]
-        .reduce((acc, { products }) => acc.concat(products), [])
-        .reduce(
-          (
-            acc,
-            {
-              variantUuid,
-              quantity,
-              variantName,
-              unitName,
-              productUuid,
-              unitPrice,
-            },
-          ) => ({
-            ...acc,
-            [variantUuid]: {
-              quantity: acc[variantUuid]
-                ? acc[variantUuid].quantity + Number(quantity)
-                : Number(quantity),
-              variant: variantName || '',
-              productUuid,
-              unitName: unitName || '',
-              unitPrice: acc[variantUuid]
-                ? acc[variantUuid].unitPrice +
-                  Number(unitPrice / 100) * Number(quantity)
-                : Number(unitPrice / 100) * Number(quantity),
-            },
-          }),
-          {},
-        ),
-    };
-  });
+      [variantUuid]: {
+        quantity: acc[variantUuid]
+          ? acc[variantUuid].quantity + Number(quantity)
+          : Number(quantity),
+        variant: variantName || '',
+        productUuid,
+        unitName: unitName || '',
+        totaly: acc[variantUuid]
+          ? acc[variantUuid].unitPrice +
+            Number(unitPrice / 100) * Number(quantity)
+          : Number(unitPrice / 100) * Number(quantity),
+      },
+    }),
+    {},
+  );
 };
 
 const GetAllProducts = async (token, organizationUuid) => {
@@ -146,31 +129,19 @@ module.exports.handle = async ev => {
   const products = await GetAllProducts(token, organizationUuid);
   const transactions = await GetLatestTransactions(token, type);
 
-  const data = transactions.map(
-    ({ products: transactionProducts, timestamp }) => {
-      return Object.keys(transactionProducts).map(key => {
-        const matchingProduct = products.find(product => {
-          return product.uuid === transactionProducts[key].productUuid;
-        });
+  const data = Object.keys(transactions).map(key => {
+    const matchingProduct = products.find(product => {
+      return product.uuid === transactions[key].productUuid;
+    });
 
-        return {
-          brand: matchingProduct ? matchingProduct.name : undefined,
-          timestamp,
-          ...transactionProducts[key],
-        };
-      });
-    },
-  );
+    return {
+      brand: matchingProduct ? matchingProduct.name.trim() : undefined,
+      ...transactions[key],
+    };
+  });
 
   const parser = new Json2csvParser({
-    fields: [
-      'brand',
-      'timestamp',
-      'quantity',
-      'variant',
-      'unitName',
-      'unitPrice',
-    ],
+    fields: ['brand', 'quantity', 'variant', 'unitName', 'unitPrice'],
   });
 
   const csv = parser.parse(Flatten(data));
