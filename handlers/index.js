@@ -1,5 +1,5 @@
 const Got = require('got');
-const Flatten = require('lodash.flatten');
+const SortBy = require('lodash.sortby');
 const { format, subDays, startOfWeek, startOfDay } = require('date-fns');
 const Json2csvParser = require('json2csv').Parser;
 const AWS = require('aws-sdk');
@@ -76,7 +76,7 @@ const GetLatestTransactions = async (token, type) => {
         variant: variantName || '',
         productUuid,
         unitName: unitName || '',
-        totaly: acc[variantUuid]
+        unitPrice: acc[variantUuid]
           ? acc[variantUuid].unitPrice +
             Number(unitPrice / 100) * Number(quantity)
           : Number(unitPrice / 100) * Number(quantity),
@@ -121,7 +121,7 @@ const UploadToS3 = async (csv, type) => {
 };
 
 module.exports.handle = async ev => {
-  const { type = 'daily' } = ev;
+  const { type = 'weekly' } = ev;
 
   const { access_token: token } = await Auth();
   const { organizationUuid } = await GetOrganisationMeta(token);
@@ -144,7 +144,7 @@ module.exports.handle = async ev => {
     fields: ['brand', 'quantity', 'variant', 'unitName', 'unitPrice'],
   });
 
-  const csv = parser.parse(Flatten(data));
+  const csv = parser.parse(SortBy(data, ({ brand }) => brand));
 
   if (STAGE === 'prod') {
     await UploadToS3(csv, type);
