@@ -19,7 +19,7 @@
     "lint-staged": "^8.1.5",
     "lodash.flatten": "^4.4.0",
     "lodash.sortby": "^4.7.0",
-    "node-fetch": "^2.3.0",
+    "node-fetch": "^2.6.7",
     "serverless-offline-scheduler": "^0.3.7"
   },
   "devDependencies": {
